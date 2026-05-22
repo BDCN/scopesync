@@ -211,6 +211,36 @@ class Cron extends CI_Controller {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // rematch — force-run matching for a specific submittal (CLI only)
+    // Usage: php index.php cron rematch <submittal_id> <tenant_id>
+    // -------------------------------------------------------------------------
+
+    public function rematch()
+    {
+        $args      = array_slice($_SERVER['argv'] ?? [], 3);
+        $submittalId = isset($args[0]) ? (int) $args[0] : 0;
+        $tenantId    = isset($args[1]) ? (int) $args[1] : 0;
+
+        if ($submittalId <= 0 || $tenantId <= 0) {
+            $this->_log('Usage: php index.php cron rematch <submittal_id> <tenant_id>');
+            return;
+        }
+
+        $extractions = $this->Extraction_model->getBySubmittal($submittalId, $tenantId);
+        if (empty($extractions)) {
+            $this->_log("No extractions found for submittal #{$submittalId} tenant #{$tenantId}.");
+            return;
+        }
+
+        // Reset matching_status so the atomic claim will succeed
+        $this->db->where(['id' => $submittalId, 'tenant_id' => $tenantId])
+                 ->update('submittal_jobs', ['matching_status' => null]);
+
+        $this->_log("Forcing matching for submittal #{$submittalId}...");
+        $this->_triggerMatching($submittalId, $tenantId, $extractions);
+    }
+
     protected function _log(string $msg)
     {
         echo '[' . date('Y-m-d H:i:s') . '] ' . $msg . PHP_EOL;
