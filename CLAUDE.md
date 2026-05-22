@@ -177,7 +177,9 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - Required headers:
   - `x-api-key: <key>` (from secrets.php)
   - `anthropic-version: 2023-06-01`
+  - `anthropic-beta: pdfs-2024-09-25` (required for PDF document blocks)
   - `content-type: application/json`
+  - `Expect:` (empty — disables HTTP 100-continue, prevents large-payload stalls)
 - Default model for extraction: `claude-sonnet-4-6`
 - Escalation model (complex specs): `claude-opus-4-7`
 - PDF input via document content block:
@@ -217,7 +219,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 |---|---|---|
 | 1 | Foundation — CI3 setup, schema, deploy pipeline | **Complete** |
 | 2 | Auth & Tenant Foundation | **Complete** (2026-05-22) |
-| 3 | Upload & Extraction | Not started |
+| 3 | Upload & Extraction | **Complete** (2026-05-22) |
 
 ### Phase 2 — what was built (2026-05-22)
 
@@ -231,6 +233,24 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - Models: `User_model`, `Tenant_model`, `Project_model`, `Division_model`, `Submittal_model`
 - Views: Bootstrap 5 CDN layout (`views/layouts/main.php`), auth forms, dashboard, project list/detail/edit, submittal detail
 - Every state-changing action writes to `audit_log`
+
+### Phase 3 — what was built (2026-05-22)
+
+- `application/models/Document_model.php` — tenant-scoped document CRUD; `getByIdRaw()` (no tenant filter, for CLI worker); `findBySha256()` for dedup; `countThisMonth()` for plan limits
+- `application/models/Extraction_model.php` — `getPending(limit)`, `claimById()` (atomic UPDATE + affected_rows), `markComplete()`, `markFailed()`, `recentForAdmin()`
+- `application/libraries/PromptLoader.php` — loads `prompts/{name}.md`, strips YAML frontmatter, splits on `\n## SYSTEM` / `\n## USER` using `strpos()` (safe with nested `###` and JSON code blocks inside sections), in-memory cache per request
+- `application/libraries/ClaudeClient.php` — cURL wrapper; `extract($promptName, $documentPath, $options)` base64-encodes PDF as `document` content block; 300s timeout; 2 retries on 429/503; **requires `CURLOPT_IPRESOLVE_V4` (IPv6 stalls on large POST bodies from this server)** and **`Expect:` empty header** (disables 100-continue for large payloads)
+- `Submittals.php` — `upload()` XHR endpoint (finfo MIME check, SHA-256 dedup, plan limits, move_uploaded_file, creates documents + extractions rows); `view()` (documents list + extraction results cards); `rerun()` (re-queues extraction)
+- `application/controllers/Cron.php` — CLI-only; `process()` claims up to 5 pending, calls ClaudeClient, writes audit_log with explicit tenant_id; `_syncSubmittalStatus()` updates submittal to extracting/review/failed
+- `application/controllers/Admin.php` — `extractions()` (last 100 extractions with token costs, owner/admin only)
+- `application/views/submittals/view.php` — drag-drop upload zone (vanilla JS XHR, sequential, CSRF refresh); documents table with status/confidence badges; extraction results cards (spec: products accordion with source citations; cut sheet: variants accordion)
+- `application/views/admin/extractions.php` — token cost dashboard
+- `scripts/worker.php` — thin shim: `CI_ENV=production php index.php cron process`
+- `scripts/setup-cron.sh` — installs `/etc/cron.d/scopesync-worker`, fixes ownership, smoke-tests
+
+**cURL lesson:** this server reaches `api.anthropic.com` via IPv6 only (for small requests), but IPv6 TCP stalls on large POST bodies (multi-MB base64 PDFs). Fix: `CURLOPT_IPRESOLVE_V4`. Also add empty `Expect:` header to disable HTTP 100-continue for large payloads.
+
+---
 
 ### Dev seed data
 
