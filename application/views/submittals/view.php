@@ -48,20 +48,37 @@ foreach ($extractions_by_doc as $extr) {
             <?php endif; ?>
         </div>
     </div>
-    <?php
-    $statusColors = [
-        'draft'      => 'secondary',
-        'uploading'  => 'info',
-        'extracting' => 'warning',
-        'matching'   => 'warning',
-        'review'     => 'primary',
-        'assembling' => 'primary',
-        'delivered'  => 'success',
-        'failed'     => 'danger',
-    ];
-    $sc = $statusColors[$submittal['status']] ?? 'secondary';
-    ?>
-    <span class="badge bg-<?= $sc ?> fs-6 ms-3"><?= ucfirst($submittal['status']) ?></span>
+    <div class="d-flex align-items-center gap-2 ms-3">
+        <?php
+        $statusColors = [
+            'draft'      => 'secondary',
+            'uploading'  => 'info',
+            'extracting' => 'warning',
+            'matching'   => 'warning',
+            'review'     => 'primary',
+            'assembling' => 'primary',
+            'delivered'  => 'success',
+            'failed'     => 'danger',
+        ];
+        $sc = $statusColors[$submittal['status']] ?? 'secondary';
+        ?>
+        <span class="badge bg-<?= $sc ?> fs-6"><?= ucfirst($submittal['status']) ?></span>
+        <?php if (($submittal['matching_status'] ?? '') === 'complete'): ?>
+        <a href="<?= site_url('submittals/' . $submittal['id'] . '/compliance') ?>" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-table me-1"></i>Compliance Matrix
+        </a>
+        <a href="<?= site_url('submittals/' . $submittal['id'] . '/review') ?>" class="btn btn-primary btn-sm">
+            <i class="bi bi-clipboard-check me-1"></i>Review Queue
+        </a>
+        <?php elseif (($submittal['matching_status'] ?? '') === 'running'): ?>
+        <span class="badge bg-warning text-dark">
+            <span class="spinner-border spinner-border-sm me-1" style="width:.6rem;height:.6rem"></span>
+            Matching…
+        </span>
+        <?php elseif (($submittal['matching_status'] ?? '') === 'failed'): ?>
+        <span class="badge bg-danger">Matching failed</span>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php if ($hasPending): ?>

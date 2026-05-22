@@ -9,8 +9,8 @@ class Cron extends CI_Controller {
         if ( ! $this->input->is_cli_request()) {
             show_404();
         }
-        $this->load->model(['Extraction_model', 'Document_model', 'Submittal_model']);
-        $this->load->library('ClaudeClient');
+        $this->load->model(['Extraction_model', 'Document_model', 'Submittal_model', 'Match_result_model']);
+        $this->load->library(['ClaudeClient', 'MatchingEngine']);
     }
 
     // -------------------------------------------------------------------------
@@ -145,6 +145,70 @@ class Cron extends CI_Controller {
         }
 
         $this->Submittal_model->update($submittalId, $tenantId, ['status' => $newStatus]);
+
+        if ($newStatus === 'review') {
+            $this->_triggerMatching($submittalId, $tenantId, $extractions);
+        }
+    }
+
+    protected function _triggerMatching(int $submittalId, int $tenantId, array $extractions)
+    {
+        // Guard: skip if matching already ran for this submittal
+        // Atomic claim: only the first caller that flips matching_status from NULL → running proceeds.
+        $this->db->where(['id' => $submittalId, 'tenant_id' => $tenantId, 'matching_status' => null])
+                 ->update('submittal_jobs', ['matching_status' => 'running']);
+        if ($this->db->affected_rows() === 0) {
+            $this->_log("Matching for submittal #{$submittalId} already claimed or complete — skipping.");
+            return;
+        }
+
+        // Partition completed extractions by type
+        $specExtrs = [];
+        $csExtrs   = [];
+        foreach ($extractions as $e) {
+            if ($e['status'] !== 'completed' || empty($e['structured_data'])) {
+                continue;
+            }
+            if ($e['extraction_type'] === 'spec_section') {
+                $specExtrs[] = $e;
+            } elseif ($e['extraction_type'] === 'cut_sheet') {
+                $csExtrs[] = $e;
+            }
+        }
+
+        if (empty($specExtrs) || empty($csExtrs)) {
+            // Not enough completed extractions yet — release the claim so a future run can retry
+            $this->Submittal_model->update($submittalId, $tenantId, ['matching_status' => null]);
+            $this->_log("Submittal #{$submittalId}: skipping matching — need both spec and cut sheet extractions (spec=" . count($specExtrs) . ", cutsheets=" . count($csExtrs) . ").");
+            return;
+        }
+
+        $this->_log("Running matching engine for submittal #{$submittalId} (" . count($specExtrs) . " spec, " . count($csExtrs) . " cut sheet)...");
+
+        try {
+            $totalResults = 0;
+            foreach ($specExtrs as $specExtr) {
+                $results = $this->matchingengine->run($specExtr, $csExtrs);
+                foreach ($results as $result) {
+                    $this->Match_result_model->create($result);
+                    $totalResults++;
+                }
+            }
+
+            $this->Submittal_model->update($submittalId, $tenantId, ['matching_status' => 'complete']);
+
+            $this->auditlog->log(
+                'submittal', 'matching_complete', $submittalId,
+                ['match_results_count' => $totalResults],
+                $tenantId
+            );
+
+            $this->_log("Matching complete for submittal #{$submittalId}: {$totalResults} result(s).");
+
+        } catch (Exception $e) {
+            $this->Submittal_model->update($submittalId, $tenantId, ['matching_status' => 'failed']);
+            $this->_log("Matching failed for submittal #{$submittalId}: " . $e->getMessage());
+        }
     }
 
     protected function _log(string $msg)

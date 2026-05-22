@@ -226,6 +226,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 | 1 | Foundation — CI3 setup, schema, deploy pipeline | **Complete** |
 | 2 | Auth & Tenant Foundation | **Complete** (2026-05-22) |
 | 3 | Upload & Extraction | **Complete** (2026-05-22) |
+| 4 | Matching Engine & Review Queue | **Complete** (2026-05-22) |
 
 ### Phase 2 — what was built (2026-05-22)
 
@@ -255,6 +256,19 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - `scripts/setup-cron.sh` — installs `/etc/cron.d/scopesync-worker`, fixes ownership, smoke-tests
 
 **cURL lesson:** this server reaches `api.anthropic.com` via IPv6 only (for small requests), but IPv6 TCP stalls on large POST bodies (multi-MB base64 PDFs). Fix: `CURLOPT_IPRESOLVE_V4`. Also add empty `Expect:` header to disable HTTP 100-continue for large payloads.
+
+### Phase 4 — what was built (2026-05-22)
+
+- `migrations/0002_match_results.sql` — adds `match_results` table, `review_decisions` table, and `matching_status` column to `submittal_jobs`
+- `application/libraries/MatchingEngine.php` — pure-computation library; `run($specExtraction, $cutsheetExtractions)` returns match-result arrays; numeric ±2% tolerance for `voltage_rating`; falls back to `common_attributes` when a variant lacks an attribute; handles `nema_configuration` top-level field on cut sheet variants
+- `application/models/Match_result_model.php` — CRUD for `match_results`; `existsForSubmittal()` guard check
+- `application/models/Review_decision_model.php` — CRUD for `review_decisions`; `save()` is an upsert; `allDecided()` and `hasRejections()` for status transitions; `mapByMatchResult()` for view lookup
+- `Cron.php` — `_triggerMatching()` called from `_syncSubmittalStatus()` when status hits 'review'; atomic `matching_status` claim via `UPDATE … WHERE matching_status IS NULL` + `affected_rows` (prevents duplicate runs); resets claim to NULL if not enough completed extractions
+- `Submittals.php` — three new methods: `compliance()` builds the attribute×catalog matrix, `review()` loads match results + decision map, `decide()` XHR POST endpoint validates and persists decisions; advances submittal to 'assembling' when all decided with no rejections
+- Routes: `submittals/(:num)/compliance`, `submittals/(:num)/review`, `submittals/(:num)/decide`
+- `application/views/submittals/compliance.php` — Bootstrap 5 color-coded compliance matrix grouped by product category; legend strip; spec value / product value tooltip on hover
+- `application/views/submittals/review.php` — per-product accordion cards; Approve / Override / Reject XHR buttons; override requires notes field; all-decided banner; auto-reload after decision saved
+- `application/views/submittals/view.php` — Compliance Matrix and Review Queue buttons appear in the status bar once `matching_status = 'complete'`; "Matching…" spinner badge while running
 
 ---
 

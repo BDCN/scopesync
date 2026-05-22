@@ -17,6 +17,8 @@ class Submittals extends MY_Controller {
             'Document_model',
             'Extraction_model',
             'Tenant_model',
+            'Match_result_model',
+            'Review_decision_model',
         ]);
     }
 
@@ -243,6 +245,202 @@ class Submittals extends MY_Controller {
             'filename'       => $origName,
             'size_bytes'     => $fileSize,
             'csrf_hash'      => $this->security->get_csrf_hash(),
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Compliance matrix — read-only table view of all match results
+    // -------------------------------------------------------------------------
+
+    public function compliance(int $id)
+    {
+        $submittal = $this->Submittal_model->getByIdAndTenant($id, $this->tenantcontext->id());
+        if ( ! $submittal) {
+            show_404();
+        }
+
+        $division = $this->Division_model->getByIdAndTenant(
+            (int) $submittal['division_id'],
+            $this->tenantcontext->id()
+        );
+        $project = $this->Project_model->getByIdAndTenant(
+            (int) $submittal['project_id'],
+            $this->tenantcontext->id()
+        );
+
+        $matchResults = $this->Match_result_model->getBySubmittal($id, $this->tenantcontext->id());
+
+        // Build matrix: categories[category]['attrs'][attr_name] = []
+        //                              ['catalogs'][cat_num] = overall_result
+        //                              ['cells'][attr_name][cat_num] = cell
+        $matrix      = [];
+        $allCatalogs = []; // ordered list per category
+
+        foreach ($matchResults as $mr) {
+            $cat    = $mr['product_category'] ?: 'General';
+            $catNum = $mr['catalog_number'];
+
+            if ( ! isset($matrix[$cat])) {
+                $matrix[$cat]      = ['attrs' => [], 'catalogs' => [], 'cells' => [], 'overall' => []];
+                $allCatalogs[$cat] = [];
+            }
+
+            $matrix[$cat]['catalogs'][$catNum]  = $catNum;
+            $matrix[$cat]['overall'][$catNum]   = $mr['overall_result'];
+            $allCatalogs[$cat][$catNum]         = $catNum;
+
+            $decoded     = json_decode($mr['attribute_results'], TRUE);
+            $attrResults = $decoded['attribute_results'] ?? [];
+
+            foreach ($attrResults as $ar) {
+                $attrName = $ar['attribute'];
+                if ( ! isset($matrix[$cat]['attrs'][$attrName])) {
+                    $matrix[$cat]['attrs'][$attrName] = $attrName;
+                }
+                $matrix[$cat]['cells'][$attrName][$catNum] = $ar;
+            }
+
+            // Also record listing results per catalog
+            $listingResults = $decoded['listing_results'] ?? [];
+            foreach ($listingResults as $lr) {
+                $key = '_listing_' . $lr['required_listing'];
+                if ( ! isset($matrix[$cat]['attrs'][$key])) {
+                    $matrix[$cat]['attrs'][$key] = $lr['required_listing'] . ' (listing)';
+                }
+                $matrix[$cat]['cells'][$key][$catNum] = [
+                    'result'        => $lr['result'],
+                    'spec_value'    => $lr['required_listing'],
+                    'product_value' => $lr['matched_listing'],
+                ];
+            }
+        }
+
+        $hasResults = ! empty($matchResults);
+
+        $this->loadView('submittals/compliance', [
+            'page_title'  => 'Compliance Matrix — ' . htmlspecialchars($submittal['name']),
+            'submittal'   => $submittal,
+            'division'    => $division,
+            'project'     => $project,
+            'matrix'      => $matrix,
+            'has_results' => $hasResults,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Review queue — approve / override / reject per match result
+    // -------------------------------------------------------------------------
+
+    public function review(int $id)
+    {
+        $submittal = $this->Submittal_model->getByIdAndTenant($id, $this->tenantcontext->id());
+        if ( ! $submittal) {
+            show_404();
+        }
+
+        $division = $this->Division_model->getByIdAndTenant(
+            (int) $submittal['division_id'],
+            $this->tenantcontext->id()
+        );
+        $project = $this->Project_model->getByIdAndTenant(
+            (int) $submittal['project_id'],
+            $this->tenantcontext->id()
+        );
+
+        $matchResults    = $this->Match_result_model->getBySubmittal($id, $this->tenantcontext->id());
+        $decisionMap     = $this->Review_decision_model->mapByMatchResult($id, $this->tenantcontext->id());
+        $allDecided      = $this->Review_decision_model->allDecided($id, $this->tenantcontext->id());
+        $hasRejections   = $this->Review_decision_model->hasRejections($id, $this->tenantcontext->id());
+
+        // Decode attribute_results for each match result
+        $decoded = [];
+        foreach ($matchResults as $mr) {
+            $decoded[$mr['id']] = json_decode($mr['attribute_results'], TRUE);
+        }
+
+        $this->loadView('submittals/review', [
+            'page_title'    => 'Review — ' . htmlspecialchars($submittal['name']),
+            'submittal'     => $submittal,
+            'division'      => $division,
+            'project'       => $project,
+            'match_results' => $matchResults,
+            'decoded'       => $decoded,
+            'decision_map'  => $decisionMap,
+            'all_decided'   => $allDecided,
+            'has_rejections'=> $hasRejections,
+            'csrf_token_name' => $this->security->get_csrf_token_name(),
+            'csrf_hash'     => $this->security->get_csrf_hash(),
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Decide — POST, XHR, save a review decision for one match result
+    // -------------------------------------------------------------------------
+
+    public function decide(int $submittalId)
+    {
+        if ($this->input->method() !== 'post') {
+            show_404();
+        }
+
+        $this->output->set_content_type('application/json');
+
+        $submittal = $this->Submittal_model->getByIdAndTenant($submittalId, $this->tenantcontext->id());
+        if ( ! $submittal) {
+            echo json_encode(['success' => FALSE, 'error' => 'Submittal not found.']);
+            return;
+        }
+
+        $matchResultId  = (int) $this->input->post('match_result_id', TRUE);
+        $decision       = $this->input->post('decision', TRUE);
+        $overrideNotes  = $this->input->post('override_notes', TRUE) ?: null;
+
+        if ( ! in_array($decision, ['approved', 'overridden', 'rejected'], TRUE)) {
+            echo json_encode(['success' => FALSE, 'error' => 'Invalid decision value.']);
+            return;
+        }
+
+        $matchResult = $this->Match_result_model->getByIdAndTenant($matchResultId, $this->tenantcontext->id());
+        if ( ! $matchResult || (int) $matchResult['submittal_job_id'] !== $submittalId) {
+            echo json_encode(['success' => FALSE, 'error' => 'Match result not found.']);
+            return;
+        }
+
+        if ($decision === 'overridden' && empty($overrideNotes)) {
+            echo json_encode(['success' => FALSE, 'error' => 'Override justification is required.']);
+            return;
+        }
+
+        $this->Review_decision_model->save([
+            'tenant_id'        => $this->tenantcontext->id(),
+            'submittal_job_id' => $submittalId,
+            'match_result_id'  => $matchResultId,
+            'decision'         => $decision,
+            'override_notes'   => $overrideNotes,
+            'decided_by'       => $this->tenantcontext->userId(),
+        ]);
+
+        $this->auditlog->log('match_result', $decision, $matchResultId, [
+            'submittal_id'   => $submittalId,
+            'catalog_number' => $matchResult['catalog_number'],
+            'override_notes' => $overrideNotes,
+        ]);
+
+        // If all decided, advance submittal status
+        $allDecided    = $this->Review_decision_model->allDecided($submittalId, $this->tenantcontext->id());
+        $hasRejections = $this->Review_decision_model->hasRejections($submittalId, $this->tenantcontext->id());
+        $newStatus     = null;
+
+        if ($allDecided) {
+            $newStatus = $hasRejections ? 'review' : 'assembling';
+            $this->Submittal_model->update($submittalId, $this->tenantcontext->id(), ['status' => $newStatus]);
+        }
+
+        echo json_encode([
+            'success'    => TRUE,
+            'all_decided'=> $allDecided,
+            'new_status' => $newStatus,
+            'csrf_hash'  => $this->security->get_csrf_hash(),
         ]);
     }
 

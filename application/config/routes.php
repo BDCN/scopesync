@@ -79,5 +79,10 @@ $route['submittals/(:num)/upload']           = 'submittals/upload/$1';
 // Extractions
 $route['extractions/(:num)/rerun']           = 'submittals/rerun/$1';
 
+// Compliance matrix & review queue (Phase 4)
+$route['submittals/(:num)/compliance']       = 'submittals/compliance/$1';
+$route['submittals/(:num)/review']           = 'submittals/review/$1';
+$route['submittals/(:num)/decide']           = 'submittals/decide/$1';
+
 // Admin
 $route['admin/extractions']                  = 'admin/extractions';
