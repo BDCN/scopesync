@@ -156,7 +156,22 @@ class ClaudeClient {
         $structuredData = NULL;
         $confidence     = NULL;
 
-        $decoded = json_decode(trim($rawText), TRUE);
+        // Claude occasionally wraps its JSON output in ```json ... ``` fences.
+        // Strip them so json_decode works regardless.
+        $rawText = trim($rawText);
+        if (str_starts_with($rawText, '```')) {
+            $rawText = preg_replace('/^```[a-z]*\s*/i', '', $rawText);
+            $rawText = preg_replace('/\s*```\s*$/i',    '', $rawText);
+            $rawText = trim($rawText);
+        }
+        // Belt-and-suspenders: extract from first { to last }
+        $jStart = strpos($rawText, '{');
+        $jEnd   = strrpos($rawText, '}');
+        if ($jStart !== FALSE && $jEnd !== FALSE && $jEnd > $jStart) {
+            $rawText = substr($rawText, $jStart, $jEnd - $jStart + 1);
+        }
+
+        $decoded = json_decode($rawText, TRUE);
         if (is_array($decoded)) {
             $structuredData = trim($rawText); // store as JSON string for DB
             $confidence     = $decoded['meta']['extraction_confidence'] ?? NULL;
