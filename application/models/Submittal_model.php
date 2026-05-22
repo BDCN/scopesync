@@ -27,6 +27,11 @@ class Submittal_model extends CI_Model {
         ])->row_array();
     }
 
+    public function getByIdRaw(int $id)
+    {
+        return $this->db->get_where('submittal_jobs', ['id' => $id])->row_array();
+    }
+
     public function create(array $data): int
     {
         $this->db->insert('submittal_jobs', $data);

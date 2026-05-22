@@ -74,3 +74,10 @@ $route['divisions/(:num)/delete']          = 'divisions/deleteDivision/$1';
 // Submittals (nested under divisions)
 $route['divisions/(:num)/submittals/create'] = 'submittals/create/$1';
 $route['submittals/(:num)']                  = 'submittals/view/$1';
+$route['submittals/(:num)/upload']           = 'submittals/upload/$1';
+
+// Extractions
+$route['extractions/(:num)/rerun']           = 'submittals/rerun/$1';
+
+// Admin
+$route['admin/extractions']                  = 'admin/extractions';

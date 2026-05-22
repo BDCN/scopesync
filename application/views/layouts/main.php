@@ -42,6 +42,13 @@
                         <i class="bi bi-folder2-open me-1"></i>Projects
                     </a>
                 </li>
+                <?php if (in_array($this->tenantcontext->userRole(), ['owner', 'admin'], TRUE)): ?>
+                <li class="nav-item">
+                    <a class="nav-link" href="<?= site_url('admin/extractions') ?>">
+                        <i class="bi bi-activity me-1"></i>Extractions
+                    </a>
+                </li>
+                <?php endif; ?>
             </ul>
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item dropdown">
