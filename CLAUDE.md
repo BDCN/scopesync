@@ -16,7 +16,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - **Language:** PHP 8.3
 - **Framework:** CodeIgniter 3.x (**NO COMPOSER** — see Hard Constraints)
 - **Database:** MariaDB 10.6+
-- **Web server:** Apache 2.4 on **RHEL/Rocky/AlmaLinux** (user/group is `apache:apache`, NOT `www-data`)
+- **Web server:** Apache 2.4 on **Debian** (user/group is `apache:apache`)
 - **PDF generation:** TCPDF (drop-in, no composer required)
 - **AI provider:** Anthropic Claude API via direct cURL (no SDK install)
 - **File storage:** Local filesystem under `storage/tenants/{tenant_id}/...`
@@ -29,17 +29,17 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 
 1. **NEVER use composer.** No `composer install`, no `composer require`, no `vendor/` directory managed by Composer. Any third-party library must be drop-in: download the release zip, extract into `application/third_party/<libname>/`, and load via CI3's `$this->load->library()` mechanism or a manual `require_once`.
 
-2. **Apache user is `apache`, group is `apache`.** This is RHEL/Rocky/AlmaLinux, NOT Debian/Ubuntu. Every `chown`, `chmod`, systemd reference, vhost config, and permission instruction must use `apache:apache`. If you ever see `www-data` in generated code or docs, fix it before suggesting.
+2. **Apache user is `apache`, group is `apache`.** Server is Debian but Apache runs as a custom `apache` user (not the Debian default `www-data`). Every `chown`, `chmod`, systemd reference, vhost config, and permission instruction must use `apache:apache`. If you ever see `www-data` in generated code or docs, fix it before suggesting.
 
-3. **Git workflow is mandatory.** Every meaningful change is committed to GitHub and pulled to the server. Maintain a clean local working copy (default location: `~/scopesync` on the dev machine). Workflow per change:
+3. **Git workflow is mandatory.** Every meaningful change is committed to GitHub. GitHub Actions auto-deploys to the server on every push to `main` (`.github/workflows/deploy.yml`). Workflow per change:
    ```bash
    # local
    git add -A
    git commit -m "<conventional commit message>"
    git push origin main
-   # server
-   ssh user@server "cd /var/www/scopesync && git pull && sudo chown -R apache:apache storage/"
+   # GitHub Actions SSHes into 45.79.181.107 and runs git pull automatically
    ```
+   GitHub Secrets required: `SSH_PRIVATE_KEY`, `SERVER_HOST`, `SERVER_USER`.
 
 4. **Tenant isolation is non-negotiable.** Every query against multi-tenant tables MUST filter by `tenant_id`. Build it once via a `TenantContext` library and enforce at the model layer — never trust client input for `tenant_id`.
 
@@ -127,16 +127,19 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 
 ---
 
-## Server Layout (RHEL/Rocky/AlmaLinux)
+## Server Layout (Debian)
 
 - App lives at: `/var/www/scopesync`
 - Apache DocumentRoot: `/var/www/scopesync/public`
-- Apache vhost config: `/etc/httpd/conf.d/scopesync.conf`
-- Apache logs: `/var/log/httpd/scopesync_*.log`
+- Apache vhost config: `/etc/apache2/sites-available/scopesync.conf` (SSL: `scopesync-le-ssl.conf`)
+- Apache logs: `/var/log/apache2/scopesync_*.log`
 - Owner: `apache:apache` recursive on `/var/www/scopesync` (especially `storage/`)
+- SSL: Let's Encrypt via certbot, auto-renewing. Cert at `/etc/letsencrypt/live/scopesync.app/`
+- `CI_ENV=production` set via `SetEnv` in the SSL vhost config
 - MariaDB DB name: `scopesync`
-- MariaDB user: `scopesync` (NOT root; least-privilege)
-- PHP: PHP-FPM via `mod_proxy_fcgi` OR `mod_php` — confirm with user. Default assumption: `mod_php`.
+- MariaDB user: `scope_sync` (NOT root; least-privilege)
+- PHP: `mod_php` on Apache2
+- Apache package: `apache2` — use `a2ensite`, `a2enmod`, `systemctl reload apache2`
 
 ---
 
@@ -199,7 +202,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 ## Things Claude Code Should Ask Before Doing
 
 - Any deployment to a new server (confirm hostname, SSH user)
-- Any package install via `dnf` / `yum` (confirm vs check existing)
+- Any package install via `apt` (confirm vs check existing)
 - Any schema migration that drops a column or table
 - Any change to `system/` CI3 core (should be never — flag if proposed)
 - Any new third-party library (must be drop-in, must justify why needed)
