@@ -240,20 +240,24 @@ To get a working dev login, uncomment the seed block at the bottom of `schema.sq
 admin@acme-electric.test  /  changeme
 ```
 
-Or run the SQL manually:
+Or run the SQL manually (with `scopesync` selected as the active DB):
 ```sql
 INSERT INTO `tenants` (`slug`,`name`,`plan`,`industry_default`)
 VALUES ('acme-electric','Acme Electric','pro','electrical');
 
+SET @new_tenant_id = LAST_INSERT_ID();
+
 INSERT INTO `users` (`tenant_id`,`email`,`password_hash`,`name`,`role`)
-VALUES (LAST_INSERT_ID(),'admin@acme-electric.test',
+VALUES (@new_tenant_id,'admin@acme-electric.test',
   '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi','Acme Admin','owner');
 
 INSERT INTO `tenant_settings` (`tenant_id`,`company_name`,`primary_color`)
-VALUES (LAST_INSERT_ID()-1, 'Acme Electric Corp', '#1A73E8');
+VALUES (@new_tenant_id, 'Acme Electric Corp', '#1A73E8');
 ```
 
 The password hash above is `changeme` — change it after first login or just register a new account via `/register`.
+
+> **phpMyAdmin tip:** the verification query `SELECT COUNT(*) FROM industries` must be run with **scopesync** selected in the left sidebar, not `information_schema`. Error `#1109 - Unknown table 'industries' in information_schema` means the wrong database is active.
 
 ---
 
