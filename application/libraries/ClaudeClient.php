@@ -8,7 +8,7 @@ class ClaudeClient {
 
     const API_URL      = 'https://api.anthropic.com/v1/messages';
     const API_VERSION  = '2023-06-01';
-    const TIMEOUT      = 60;
+    const TIMEOUT      = 120;
     const MAX_RETRIES  = 2;
     const RETRY_CODES  = [429, 503];
 
@@ -115,6 +115,9 @@ class ClaudeClient {
             CURLOPT_POST           => TRUE,
             CURLOPT_POSTFIELDS     => json_encode($payload),
             CURLOPT_TIMEOUT        => self::TIMEOUT,
+            CURLOPT_CONNECTTIMEOUT => 20,
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V6,
             CURLOPT_HTTPHEADER     => [
                 'x-api-key: '         . $this->_apiKey,
                 'anthropic-version: ' . self::API_VERSION,
@@ -125,7 +128,7 @@ class ClaudeClient {
         $body     = curl_exec($ch);
         $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr  = curl_error($ch);
-        curl_close($ch);
+        $ch       = null; // PHP 8.0+: CurlHandle freed on null assignment; curl_close() deprecated
 
         if ($body === FALSE) {
             return ['http_code' => 0, 'body' => "cURL error: {$curlErr}"];
