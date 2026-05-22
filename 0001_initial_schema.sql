@@ -1,0 +1,17 @@
+-- =============================================================================
+-- Migration 0001 — Initial Schema
+-- =============================================================================
+-- This migration creates the foundational schema for ScopeSync.
+-- For a fresh install, apply /schema.sql instead (same content, easier to read).
+-- This file exists as the formal migration #0001 for version tracking.
+--
+-- TO APPLY (phpMyAdmin):
+--   Select database `scopesync`, click SQL tab, paste contents of
+--   schema.sql (NOT this file), click Go.
+--
+-- TO APPLY (CLI):
+--   mysql -u scopesync -p scopesync < schema.sql
+--
+-- Subsequent migrations (0002+) will be self-contained ALTER statements
+-- applied on top of this initial schema.
+-- =============================================================================

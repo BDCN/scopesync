@@ -1,0 +1,48 @@
+# ScopeSync .gitignore
+
+# Secrets — NEVER commit
+application/config/secrets.php
+.env
+.env.local
+.env.*.local
+
+# Storage — user uploads and generated files
+storage/
+!storage/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# CI3 cache
+application/cache/*
+!application/cache/.gitkeep
+application/cache/index.html
+application/logs/*
+!application/logs/.gitkeep
+application/logs/index.html
+
+# PHP sessions
+sess_*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Composer (we don't use it, but if accidentally generated)
+vendor/
+composer.lock
+
+# Node (in case any frontend tooling sneaks in later)
+node_modules/
+package-lock.json
+
+# phpMyAdmin exports / DB dumps — NEVER commit
+*.sql.gz
+backups/
+db_dumps/
