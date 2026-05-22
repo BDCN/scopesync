@@ -12,4 +12,4 @@ $php  = PHP_BINARY ?: '/usr/bin/php';
 $root = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'public';
 
 chdir($root);
-passthru("{$php} index.php cron process 2>&1");
+passthru("CI_ENV=production {$php} index.php cron process 2>&1");

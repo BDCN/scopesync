@@ -31,7 +31,7 @@ class AuditLog {
             'action'      => $action,
             'metadata'    => $metadata ? json_encode($metadata) : NULL,
             'ip_address'  => $this->CI->input->ip_address(),
-            'user_agent'  => substr($this->CI->input->user_agent(), 0, 500),
+            'user_agent'  => substr((string) ($this->CI->input->user_agent() ?? ''), 0, 500),
         ]);
     }
 }

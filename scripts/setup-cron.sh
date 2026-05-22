@@ -56,6 +56,7 @@ cat > "$CRON_FILE" << EOF
 # Logs: $LOG_FILE
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+CI_ENV=production
 * * * * * $APACHE_USER $PHP_BIN $APP_DIR/scripts/worker.php >> $LOG_FILE 2>&1
 EOF
 chmod 644 "$CRON_FILE"
