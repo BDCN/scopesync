@@ -274,26 +274,25 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- =============================================================================
 -- OPTIONAL: Dev seed data (do NOT run in production)
 -- =============================================================================
--- Uncomment ALL lines below to create a test tenant + admin user for local dev.
--- The password hashes to 'changeme' — change immediately after first login.
+-- Password hashes to 'changeme' — change immediately after first login.
 -- IMPORTANT: Run with `scopesync` selected as the active database, not information_schema.
---
--- INSERT INTO `tenants` (`slug`,`name`,`plan`,`industry_default`)
--- VALUES ('acme-electric','Acme Electric','pro','electrical');
---
--- SET @new_tenant_id = LAST_INSERT_ID();
---
--- INSERT INTO `users` (`tenant_id`,`email`,`password_hash`,`name`,`role`)
--- VALUES (
---     @new_tenant_id,
---     'admin@acme-electric.test',
---     '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
---     'Acme Admin',
---     'owner'
--- );
---
--- INSERT INTO `tenant_settings` (`tenant_id`,`company_name`,`primary_color`)
--- VALUES (@new_tenant_id, 'Acme Electric Corp', '#1A73E8');
+
+INSERT INTO `tenants` (`slug`,`name`,`plan`,`industry_default`)
+VALUES ('acme-electric','Acme Electric','pro','electrical');
+
+SET @new_tenant_id = LAST_INSERT_ID();
+
+INSERT INTO `users` (`tenant_id`,`email`,`password_hash`,`name`,`role`)
+VALUES (
+    @new_tenant_id,
+    'admin@acme-electric.test',
+    '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+    'Acme Admin',
+    'owner'
+);
+
+INSERT INTO `tenant_settings` (`tenant_id`,`company_name`,`primary_color`)
+VALUES (@new_tenant_id, 'Acme Electric Corp', '#1A73E8');
 
 -- =============================================================================
 -- POST-INSTALL VERIFICATION
