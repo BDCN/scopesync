@@ -8,7 +8,7 @@ class ClaudeClient {
 
     const API_URL      = 'https://api.anthropic.com/v1/messages';
     const API_VERSION  = '2023-06-01';
-    const TIMEOUT      = 120;
+    const TIMEOUT      = 300;
     const MAX_RETRIES  = 2;
     const RETRY_CODES  = [429, 503];
 
@@ -117,11 +117,13 @@ class ClaudeClient {
             CURLOPT_TIMEOUT        => self::TIMEOUT,
             CURLOPT_CONNECTTIMEOUT => 20,
             CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
-            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V6,
+            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
             CURLOPT_HTTPHEADER     => [
-                'x-api-key: '         . $this->_apiKey,
-                'anthropic-version: ' . self::API_VERSION,
+                'x-api-key: '                   . $this->_apiKey,
+                'anthropic-version: '           . self::API_VERSION,
+                'anthropic-beta: pdfs-2024-09-25',
                 'content-type: application/json',
+                'Expect:',
             ],
         ]);
 
