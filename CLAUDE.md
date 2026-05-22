@@ -6,8 +6,8 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 
 **Target customer:** subcontractors in commercial and industrial construction. Launch vertical: electrical (CSI Division 26). Future verticals: mechanical (23), plumbing (22), fire protection (21).
 
-**Domain:** scopesync.app (or scopesynce.app — confirm with the user)
-**Repo:** github.com/<user>/scopesync (create on first commit)
+**Domain:** scopesync.app
+**Repo:** github.com/BDCN/scopesync
 
 ---
 
@@ -70,13 +70,15 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 │   │   ├── Auth.php
 │   │   ├── Dashboard.php
 │   │   ├── Projects.php
+│   │   ├── Divisions.php
 │   │   ├── Submittals.php
-│   │   └── api/
-│   │       └── Webhooks.php
+│   │   ├── Cron.php                     # CLI worker — invoked by scripts/worker.php
+│   │   └── Admin.php                    # Extractions cost dashboard (owner/admin only)
 │   ├── models/
 │   │   ├── Tenant_model.php
 │   │   ├── User_model.php
 │   │   ├── Project_model.php
+│   │   ├── Division_model.php
 │   │   ├── Submittal_model.php
 │   │   ├── Document_model.php
 │   │   └── Extraction_model.php
@@ -84,14 +86,17 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 │   │   ├── TenantContext.php        # current tenant from session
 │   │   ├── ClaudeClient.php         # cURL wrapper for Anthropic API
 │   │   ├── PromptLoader.php         # load + version prompts from prompts/
-│   │   └── AuditLog.php
+│   │   └── AuditLog.php             # audit_log writer (tenant/user from session or explicit)
 │   ├── helpers/
 │   │   └── scopesync_helper.php
 │   ├── views/
 │   │   ├── layouts/
+│   │   │   └── main.php             # Bootstrap 5 CDN layout with top nav
 │   │   ├── auth/
 │   │   ├── dashboard/
-│   │   └── submittals/
+│   │   ├── projects/
+│   │   ├── submittals/
+│   │   └── admin/
 │   └── third_party/
 │       └── tcpdf/                   # drop-in TCPDF, no composer
 ├── system/                          # CodeIgniter 3 core — DO NOT MODIFY
@@ -120,7 +125,8 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 ├── migrations/                      # numbered SQL migrations
 │   └── 0001_initial_schema.sql
 ├── scripts/
-│   ├── worker.php                   # cron-driven extraction worker
+│   ├── worker.php                   # cron shim: CI_ENV=production php index.php cron process
+│   ├── setup-cron.sh                # installs /etc/cron.d/scopesync-worker on server
 │   └── deploy.sh
 └── logs/                            # GITIGNORED — app logs
 ```
