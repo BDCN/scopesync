@@ -276,9 +276,11 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- =============================================================================
 -- Password hashes to 'changeme' — change immediately after first login.
 -- IMPORTANT: Run with `scopesync` selected as the active database, not information_schema.
--- Safe to re-run: the DELETE clears any previous seed attempt before re-inserting.
+-- Safe to re-run: DELETEs clear any previous seed attempt (users first, then tenant,
+-- because fk_users_tenant is ON DELETE RESTRICT).
 
-DELETE FROM `tenants` WHERE `slug` = 'acme-electric';
+DELETE FROM `users`   WHERE `email`  = 'admin@acme-electric.test';
+DELETE FROM `tenants` WHERE `slug`   = 'acme-electric';
 
 INSERT INTO `tenants` (`slug`,`name`,`plan`,`industry_default`)
 VALUES ('acme-electric','Acme Electric','pro','electrical');
