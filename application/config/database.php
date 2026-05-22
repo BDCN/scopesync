@@ -71,7 +71,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | the query builder class.
 */
 // Pull credentials from gitignored secrets file
-require_once APPPATH.'config/secrets.php';
+require APPPATH.'config/secrets.php';
 
 $active_group = 'default';
 $query_builder = TRUE;
