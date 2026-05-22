@@ -59,3 +59,18 @@ $route['logout']          = 'auth/logout';
 $route['register']        = 'auth/register';
 $route['forgot-password'] = 'auth/forgotPassword';
 $route['reset-password/(:any)'] = 'auth/resetPassword/$1';
+
+// Projects
+$route['projects']                        = 'projects/index';
+$route['projects/create']                 = 'projects/create';
+$route['projects/(:num)']                 = 'projects/view/$1';
+$route['projects/(:num)/edit']            = 'projects/edit/$1';
+$route['projects/(:num)/archive']         = 'projects/archive/$1';
+
+// Divisions (nested under projects)
+$route['projects/(:num)/divisions/create'] = 'divisions/create/$1';
+$route['divisions/(:num)/delete']          = 'divisions/deleteDivision/$1';
+
+// Submittals (nested under divisions)
+$route['divisions/(:num)/submittals/create'] = 'submittals/create/$1';
+$route['submittals/(:num)']                  = 'submittals/view/$1';
