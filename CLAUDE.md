@@ -152,7 +152,9 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - Always use prepared statements via CI3 query builder bindings or `$this->db->query($sql, $params)`
 - Sanitize input via CI3 form validation library; second arg `TRUE` on `$this->input->post()` for XSS clean
 - Passwords via `password_hash()` / `password_verify()` — never store plaintext
-- Sessions: CI3 native, **database driver**, table `ci_sessions` (already in schema)
+- Sessions: CI3 native, **database driver** (`sess_driver = 'database'`), table `ci_sessions`, cookie name `ss_session`
+  - `sess_expiration = 7200`, `sess_regenerate_destroy = TRUE`, `sess_save_path = 'ci_sessions'`
+  - Session is populated via `TenantContext::setFromUser()` after login/register — never write session data directly in controllers
 - HTTPS-only cookies: `cookie_secure = TRUE`, `cookie_httponly = TRUE`, `cookie_samesite = 'Lax'`
 - CSRF protection enabled globally
 - Errors logged to `logs/`, never echoed to the user in production
@@ -206,6 +208,52 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - Any schema migration that drops a column or table
 - Any change to `system/` CI3 core (should be never — flag if proposed)
 - Any new third-party library (must be drop-in, must justify why needed)
+
+---
+
+## Build Status
+
+| Phase | Description | Status |
+|---|---|---|
+| 1 | Foundation — CI3 setup, schema, deploy pipeline | **Complete** |
+| 2 | Auth & Tenant Foundation | **Complete** (2026-05-22) |
+| 3 | Upload & Extraction | Not started |
+
+### Phase 2 — what was built (2026-05-22)
+
+- `application/core/MY_Controller.php` — base controller: `requireLogin()` auth gate, `loadView()` layout helper
+- `application/libraries/TenantContext.php` — autoloaded; populates from session after login; exposes `id()`, `slug()`, `name()`, `userId()`, `userRole()`, `isLoggedIn()`, `setFromUser()`
+- `application/libraries/AuditLog.php` — autoloaded; `log($entity_type, $action, $entity_id, $metadata, $tenant_id, $user_id)` — last two args override session values for pre-login auth events
+- `Auth.php` — login, register (tenant+user+settings in one transaction, 14-day trial), logout, forgot password (HMAC token, invalidates on password change, 1-hour expiry), reset password
+- `Projects.php` — index, create, view (with divisions + submittals), edit, archive; all tenant-filtered
+- `Divisions.php` — create (duplicate code guard), delete
+- `Submittals.php` — create, view (Phase 3 stub)
+- Models: `User_model`, `Tenant_model`, `Project_model`, `Division_model`, `Submittal_model`
+- Views: Bootstrap 5 CDN layout (`views/layouts/main.php`), auth forms, dashboard, project list/detail/edit, submittal detail
+- Every state-changing action writes to `audit_log`
+
+### Dev seed data
+
+To get a working dev login, uncomment the seed block at the bottom of `schema.sql` and run it via phpMyAdmin:
+
+```
+admin@acme-electric.test  /  changeme
+```
+
+Or run the SQL manually:
+```sql
+INSERT INTO `tenants` (`slug`,`name`,`plan`,`industry_default`)
+VALUES ('acme-electric','Acme Electric','pro','electrical');
+
+INSERT INTO `users` (`tenant_id`,`email`,`password_hash`,`name`,`role`)
+VALUES (LAST_INSERT_ID(),'admin@acme-electric.test',
+  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi','Acme Admin','owner');
+
+INSERT INTO `tenant_settings` (`tenant_id`,`company_name`,`primary_color`)
+VALUES (LAST_INSERT_ID()-1, 'Acme Electric Corp', '#1A73E8');
+```
+
+The password hash above is `changeme` — change it after first login or just register a new account via `/register`.
 
 ---
 
