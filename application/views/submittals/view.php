@@ -57,6 +57,7 @@ foreach ($extractions_by_doc as $extr) {
             'matching'   => 'warning',
             'review'     => 'primary',
             'assembling' => 'primary',
+            'complete'   => 'success',
             'delivered'  => 'success',
             'failed'     => 'danger',
         ];
