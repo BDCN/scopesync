@@ -36,7 +36,10 @@ function ss_attr_result_badge(string $result): string {
         <h1 class="h3 mb-1 fw-bold">Review Queue</h1>
         <div class="text-muted small"><?= htmlspecialchars($submittal['name']) ?></div>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-success btn-sm" id="approve-all-btn">
+            <i class="bi bi-check-all me-1"></i>Approve All
+        </button>
         <a href="<?= site_url('submittals/' . $submittal['id'] . '/compliance') ?>" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-table me-1"></i>Compliance Matrix
         </a>
@@ -79,17 +82,25 @@ function ss_attr_result_badge(string $result): string {
 <?php endif; ?>
 
 <!-- Summary strip -->
-<div class="d-flex gap-3 flex-wrap mb-4 small">
-    <?php
-    $summaryCount = ['pass' => 0, 'partial' => 0, 'fail' => 0, 'unverifiable' => 0];
-    foreach ($match_results as $mr) {
-        $summaryCount[$mr['overall_result']] = ($summaryCount[$mr['overall_result']] ?? 0) + 1;
-    }
-    $summaryLabels = ['pass' => ['success','Pass'], 'partial' => ['warning','Partial'], 'fail' => ['danger','Fail'], 'unverifiable' => ['secondary','Unverifiable']];
-    foreach ($summaryLabels as $key => [$cls, $lbl]):
-        if ($summaryCount[$key] === 0) continue;
-    ?>
+<?php
+$summaryCount = ['pass' => 0, 'partial' => 0, 'fail' => 0, 'unverifiable' => 0];
+foreach ($match_results as $mr) {
+    $summaryCount[$mr['overall_result']] = ($summaryCount[$mr['overall_result']] ?? 0) + 1;
+}
+$summaryLabels = ['pass' => ['success','Pass'], 'partial' => ['warning','Partial'], 'fail' => ['danger','Fail'], 'unverifiable' => ['secondary','Unverifiable']];
+?>
+<div class="d-flex gap-3 flex-wrap mb-3 small">
+    <?php foreach ($summaryLabels as $key => [$cls, $lbl]): if ($summaryCount[$key] === 0) continue; ?>
     <span class="badge bg-<?= $cls ?> fs-6"><?= $summaryCount[$key] ?> <?= $lbl ?></span>
+    <?php endforeach; ?>
+</div>
+
+<!-- Filter strip -->
+<div class="d-flex gap-2 align-items-center flex-wrap mb-4" id="filter-strip">
+    <span class="small text-muted">Filter:</span>
+    <button class="btn btn-sm btn-secondary active" data-filter="all">All (<?= count($match_results) ?>)</button>
+    <?php foreach ($summaryLabels as $key => [$cls, $lbl]): if ($summaryCount[$key] === 0) continue; ?>
+    <button class="btn btn-sm btn-outline-<?= $cls ?>" data-filter="<?= $key ?>"><?= $lbl ?> (<?= $summaryCount[$key] ?>)</button>
     <?php endforeach; ?>
 </div>
 
@@ -106,7 +117,9 @@ function ss_attr_result_badge(string $result): string {
     $hasIssues = ! empty($failingAttrs) || ! empty(array_filter($listingResults, function ($l) { return $l['result'] !== 'pass'; }));
 ?>
 <div class="card mb-3 <?= $decision ? 'border-' . (['approved' => 'success', 'overridden' => 'warning', 'rejected' => 'danger'][$decision['decision']] ?? '') : '' ?>"
-     id="mr-card-<?= $mrId ?>">
+     id="mr-card-<?= $mrId ?>"
+     data-mr-id="<?= $mrId ?>"
+     data-mr-result="<?= htmlspecialchars($mr['overall_result']) ?>">
 
     <div class="card-header d-flex justify-content-between align-items-center py-2">
         <div class="d-flex align-items-center gap-2">
@@ -325,6 +338,74 @@ function ss_attr_result_badge(string $result): string {
             }
         });
     });
+
+    // ---- Filter strip ----
+    const filterBtns    = document.querySelectorAll('[data-filter]');
+    const allCards      = document.querySelectorAll('[data-mr-result]');
+    const colorMap      = {all: 'secondary', pass: 'success', partial: 'warning', fail: 'danger', unverifiable: 'secondary'};
+
+    filterBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const filter = btn.dataset.filter;
+
+            filterBtns.forEach(function (b) {
+                const c = colorMap[b.dataset.filter] || 'secondary';
+                b.className = 'btn btn-sm btn-outline-' + c;
+            });
+            const ac = colorMap[filter] || 'secondary';
+            btn.className = 'btn btn-sm btn-' + ac + ' active';
+
+            allCards.forEach(function (card) {
+                card.classList.toggle('d-none', filter !== 'all' && card.dataset.mrResult !== filter);
+            });
+        });
+    });
+
+    // ---- Approve All ----
+    const approveAllBtn = document.getElementById('approve-all-btn');
+    if (approveAllBtn) {
+        approveAllBtn.addEventListener('click', function () {
+            const targets = Array.from(document.querySelectorAll('[data-mr-id]:not(.d-none)'))
+                                 .map(function (c) { return c.dataset.mrId; });
+            if (targets.length === 0) return;
+
+            if ( ! confirm('Approve all ' + targets.length + ' visible product(s)?\n\nExisting overrides and rejections will be set to Approved.')) {
+                return;
+            }
+
+            approveAllBtn.disabled = true;
+            const sid = '<?= (int) $submittal['id'] ?>';
+            _approveSequential(targets, 0, sid);
+        });
+    }
+
+    function _approveSequential(list, idx, sid) {
+        if (idx >= list.length) {
+            location.reload();
+            return;
+        }
+
+        approveAllBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Approving ' + (idx + 1) + ' / ' + list.length + '…';
+
+        const fd = new FormData();
+        fd.append('match_result_id', list[idx]);
+        fd.append('decision',        'approved');
+        fd.append('override_notes',  '');
+        fd.append(csrfName,          csrfHash);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', DECIDE_URL_TPL.replace('__SID__', sid));
+        xhr.addEventListener('load', function () {
+            let resp;
+            try { resp = JSON.parse(xhr.responseText); } catch (e) { resp = {}; }
+            if (resp.csrf_hash) csrfHash = resp.csrf_hash;
+            _approveSequential(list, idx + 1, sid);
+        });
+        xhr.addEventListener('error', function () {
+            _approveSequential(list, idx + 1, sid);
+        });
+        xhr.send(fd);
+    }
 
     function submitDecision(mrId, submittalId, decision, notes, triggerEl, feedbackEl) {
         triggerEl.disabled = true;
