@@ -228,7 +228,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 | 2 | Auth & Tenant Foundation | **Complete** (2026-05-22) |
 | 3 | Upload & Extraction | **Complete** (2026-05-22) |
 | 4 | Matching Engine & Review Queue | **Complete** (2026-05-22) |
-| 5 | PDF Assembly — submittal package generation via TCPDF | **Pending** |
+| 5 | PDF Assembly — submittal package generation via TCPDF | **Complete** (2026-05-22) |
 
 ### Phase 2 — what was built (2026-05-22)
 
@@ -273,6 +273,20 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - `application/views/submittals/view.php` — Compliance Matrix and Review Queue buttons appear in the status bar once `matching_status = 'complete'`; "Matching…" spinner badge while running
 - `ClaudeClient.php` (bug fix) — `_parseSuccess()` strips ` ```json ` fences before `json_decode()`; also extracts from first `{` to last `}` as belt-and-suspenders. Root cause: Claude wraps its JSON in markdown code fences despite prompt instruction; this silently caused all `structured_data` to be NULL until fixed.
 - `Cron.php` — added `rematch()` public CLI method; resets `matching_status=NULL` then re-runs `_triggerMatching()`. Usage: `CI_ENV=production php public/index.php cron rematch <submittal_id> <tenant_id>`. Required to recover submittals that completed extraction before Phase 4 was deployed.
+
+### Phase 5 — what was built (2026-05-22)
+
+- `migrations/0003_submittal_output.sql` — adds `output_path VARCHAR(500)` and `assembled_at DATETIME` to `submittal_jobs`
+- `application/third_party/tcpdf/` — TCPDF 6.7.7 drop-in (minimal install: core library + 14 standard PDF font definitions only; ~1.45 MB committed to git). Load via `require_once APPPATH . 'third_party/tcpdf/tcpdf.php'`.
+- `application/libraries/SubmittalAssembler.php` — `build($submittalId, $tenantId)` gathers all data (submittal, project, tenant_settings, match_results, review_decisions, extraction→document filename map), generates a 4-section PDF: (1) cover page with tenant logo + branding, (2) table of contents, (3) per-product attribute/listing comparison tables for approved/overridden products, (4) appendix of rejected products with notes. Output: `storage/tenants/{tid}/projects/{pid}/submittals/{sid}/output/package.pdf`. Uses `$pdf->Cell()`/`$pdf->MultiCell()` throughout (no `writeHTML()`). Brand color from `tenant_settings.primary_color`; falls back to ScopeSync teal `#0d9488`. Logo loaded via `$pdf->Image()` if file exists. Font: Helvetica (one of PDF's 14 standard core fonts — no font file embedding needed).
+- `Submittals::assemble($id)` — POST; validates `status = 'assembling'`; calls `SubmittalAssembler::build()`; on success writes `status = 'complete'`, `output_path`, `assembled_at`; audit logs `package_generated`. On exception, flash-errors and redirects back.
+- `Submittals::download($id)` — GET; validates ownership and file existence; streams via `readfile()` with `Content-Disposition: attachment`.
+- Routes: `submittals/(:num)/assemble` (POST), `submittals/(:num)/download` (GET)
+- `application/views/submittals/view.php` — status bar now shows "Generate Submittal Package" button (POST form with spinner on submit) when `status = 'assembling'`; "Download PDF" link when `status = 'complete'` and `output_path` is set.
+
+**TCPDF note:** Only 14 standard core PDF fonts (`helvetica.php`, `times.php`, `courier.php`, etc.) are committed — no compressed font binaries (`.z` files). The `examples/` and `tools/` directories are excluded. If you need Unicode/non-Latin characters in future, add the DejaVu font files to `fonts/` and commit them separately.
+
+**`status = 'complete'` vs `status = 'delivered'`:** The schema ENUM includes both. `complete` = package PDF generated and available to download. `delivered` is reserved for a future step (e.g., email to GC/engineer). Don't advance to `delivered` automatically.
 
 ---
 

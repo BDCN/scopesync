@@ -84,5 +84,9 @@ $route['submittals/(:num)/compliance']       = 'submittals/compliance/$1';
 $route['submittals/(:num)/review']           = 'submittals/review/$1';
 $route['submittals/(:num)/decide']           = 'submittals/decide/$1';
 
+// Submittal assembly & download (Phase 5)
+$route['submittals/(:num)/assemble']         = 'submittals/assemble/$1';
+$route['submittals/(:num)/download']         = 'submittals/download/$1';
+
 // Admin
 $route['admin/extractions']                  = 'admin/extractions';

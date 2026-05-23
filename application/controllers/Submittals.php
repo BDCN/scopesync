@@ -445,6 +445,84 @@ class Submittals extends MY_Controller {
     }
 
     // -------------------------------------------------------------------------
+    // Assemble — POST; triggers PDF generation for an assembling submittal
+    // -------------------------------------------------------------------------
+
+    public function assemble(int $id)
+    {
+        if ($this->input->method() !== 'post') {
+            redirect('submittals/' . $id);
+            return;
+        }
+
+        $submittal = $this->Submittal_model->getByIdAndTenant($id, $this->tenantcontext->id());
+        if ( ! $submittal) {
+            show_404();
+        }
+
+        if ($submittal['status'] !== 'assembling') {
+            $this->session->set_flashdata('error', 'Submittal must be in "assembling" status to generate a package.');
+            redirect('submittals/' . $id);
+            return;
+        }
+
+        $this->load->library('SubmittalAssembler');
+
+        try {
+            $outputPath = $this->submittalassembler->build($id, $this->tenantcontext->id());
+
+            // Store relative path (strip APPPATH prefix so it's portable)
+            $storagePath = ltrim(str_replace(realpath(APPPATH . '..') . DIRECTORY_SEPARATOR, '', realpath($outputPath)), '/\\');
+            $storagePath = str_replace('\\', '/', $storagePath);
+
+            $this->Submittal_model->update($id, $this->tenantcontext->id(), [
+                'status'      => 'complete',
+                'output_path' => $storagePath,
+                'assembled_at'=> date('Y-m-d H:i:s'),
+            ]);
+
+            $this->auditlog->log('submittal', 'package_generated', $id, [
+                'output_path' => $storagePath,
+            ]);
+
+            $this->session->set_flashdata('success', 'Submittal package generated successfully.');
+        } catch (Exception $e) {
+            log_message('error', 'SubmittalAssembler failed for submittal ' . $id . ': ' . $e->getMessage());
+            $this->session->set_flashdata('error', 'PDF generation failed: ' . htmlspecialchars($e->getMessage()));
+        }
+
+        redirect('submittals/' . $id);
+    }
+
+    // -------------------------------------------------------------------------
+    // Download — GET; streams the generated package PDF to browser
+    // -------------------------------------------------------------------------
+
+    public function download(int $id)
+    {
+        $submittal = $this->Submittal_model->getByIdAndTenant($id, $this->tenantcontext->id());
+        if ( ! $submittal || empty($submittal['output_path'])) {
+            show_404();
+        }
+
+        $absPath = realpath(APPPATH . '../' . ltrim($submittal['output_path'], '/'));
+        if ( ! $absPath || ! is_file($absPath)) {
+            $this->session->set_flashdata('error', 'Package file not found. Please regenerate.');
+            redirect('submittals/' . $id);
+            return;
+        }
+
+        $filename = 'submittal-' . $id . '.pdf';
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . filesize($absPath));
+        header('Cache-Control: private, no-cache');
+
+        readfile($absPath);
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
     // Re-run — POST, returns JSON
     // -------------------------------------------------------------------------
 

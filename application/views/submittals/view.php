@@ -63,6 +63,19 @@ foreach ($extractions_by_doc as $extr) {
         $sc = $statusColors[$submittal['status']] ?? 'secondary';
         ?>
         <span class="badge bg-<?= $sc ?> fs-6"><?= ucfirst($submittal['status']) ?></span>
+        <?php if ($submittal['status'] === 'complete' && ! empty($submittal['output_path'])): ?>
+        <a href="<?= site_url('submittals/' . $submittal['id'] . '/download') ?>" class="btn btn-success btn-sm">
+            <i class="bi bi-download me-1"></i>Download PDF
+        </a>
+        <?php elseif ($submittal['status'] === 'assembling'): ?>
+        <form method="post" action="<?= site_url('submittals/' . $submittal['id'] . '/assemble') ?>" class="d-inline" id="assemble-form"
+              onsubmit="(function(btn){btn.disabled=true;btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\' role=\'status\'></span>Generating…';})(document.getElementById('assemble-btn'))">
+            <input type="hidden" name="<?= $csrf_token_name ?>" value="<?= $csrf_hash ?>">
+            <button type="submit" class="btn btn-primary btn-sm" id="assemble-btn">
+                <i class="bi bi-file-earmark-pdf me-1"></i>Generate Submittal Package
+            </button>
+        </form>
+        <?php endif; ?>
         <?php if (($submittal['matching_status'] ?? '') === 'complete'): ?>
         <a href="<?= site_url('submittals/' . $submittal['id'] . '/compliance') ?>" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-table me-1"></i>Compliance Matrix
