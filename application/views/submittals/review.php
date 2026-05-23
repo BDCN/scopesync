@@ -95,11 +95,11 @@ $summaryLabels = ['pass' => ['success','Pass'], 'partial' => ['warning','Partial
     <?php endforeach; ?>
 </div>
 
-<!-- Filter strip -->
+<!-- Filter strip — all four result types always visible -->
 <div class="d-flex gap-2 align-items-center flex-wrap mb-4" id="filter-strip">
     <span class="small text-muted">Filter:</span>
     <button class="btn btn-sm btn-secondary active" data-filter="all">All (<?= count($match_results) ?>)</button>
-    <?php foreach ($summaryLabels as $key => [$cls, $lbl]): if ($summaryCount[$key] === 0) continue; ?>
+    <?php foreach ($summaryLabels as $key => [$cls, $lbl]): ?>
     <button class="btn btn-sm btn-outline-<?= $cls ?>" data-filter="<?= $key ?>"><?= $lbl ?> (<?= $summaryCount[$key] ?>)</button>
     <?php endforeach; ?>
 </div>
