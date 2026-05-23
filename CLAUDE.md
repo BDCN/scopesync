@@ -195,6 +195,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - All prompts live in `prompts/` directory, versioned per file (filename includes `_vN`)
 - Every API call logs an `extractions` row: model, prompt_version, input_tokens, output_tokens, raw_response, structured_data, status
 - Token budget per extraction: 16k output tokens default; raise to 32k only for known-large specs
+- **Response format gotcha:** Claude wraps JSON output in ` ```json ` code fences even when the prompt says not to. `ClaudeClient::_parseSuccess()` strips fences before `json_decode()`, then belt-and-suspenders extracts from first `{` to last `}`. Never remove this stripping — it will silently cause all `structured_data` to be NULL.
 
 ---
 
@@ -227,6 +228,7 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 | 2 | Auth & Tenant Foundation | **Complete** (2026-05-22) |
 | 3 | Upload & Extraction | **Complete** (2026-05-22) |
 | 4 | Matching Engine & Review Queue | **Complete** (2026-05-22) |
+| 5 | PDF Assembly — submittal package generation via TCPDF | **Pending** |
 
 ### Phase 2 — what was built (2026-05-22)
 
@@ -269,6 +271,22 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 - `application/views/submittals/compliance.php` — Bootstrap 5 color-coded compliance matrix grouped by product category; legend strip; spec value / product value tooltip on hover
 - `application/views/submittals/review.php` — per-product accordion cards; Approve / Override / Reject XHR buttons; override requires notes field; all-decided banner; auto-reload after decision saved
 - `application/views/submittals/view.php` — Compliance Matrix and Review Queue buttons appear in the status bar once `matching_status = 'complete'`; "Matching…" spinner badge while running
+- `ClaudeClient.php` (bug fix) — `_parseSuccess()` strips ` ```json ` fences before `json_decode()`; also extracts from first `{` to last `}` as belt-and-suspenders. Root cause: Claude wraps its JSON in markdown code fences despite prompt instruction; this silently caused all `structured_data` to be NULL until fixed.
+- `Cron.php` — added `rematch()` public CLI method; resets `matching_status=NULL` then re-runs `_triggerMatching()`. Usage: `CI_ENV=production php public/index.php cron rematch <submittal_id> <tenant_id>`. Required to recover submittals that completed extraction before Phase 4 was deployed.
+
+---
+
+### Matching Engine — Known Gotchas
+
+**Attribute name consistency:** `MatchingEngine` matches spec `attribute` (lowercased) against cut sheet `name` (lowercased). Both prompts define the same canonical names (`voltage_rating`, `amperage`, `aic_rating`, `number_of_poles`, etc.). If Claude uses a different name in one extraction vs the other (e.g., `poles` vs `number_of_poles`), the attribute shows as `missing` rather than `fail`. Watch extraction output carefully after any prompt change.
+
+**AIC unit consistency:** The engine compares `value` strings numerically and ignores `unit`. If the spec extraction produces `{"value": "10", "unit": "kA"}` and the cut sheet produces `{"value": "10000", "unit": "A"}`, they will NOT match (10 ≠ 10000). Write spec section documents and prompt guidance so both sides consistently use the same unit (kA or A) for interrupting capacity.
+
+**`standard` attribute is always `missing`:** Cut sheet extraction puts standards in the top-level `applicable_standards` array, not in `variants[].attributes[]` or `common_attributes[]`. Any spec attribute named `standard` will therefore always return `missing` in match results. This is intentional — standards verification is a separate concern from attribute matching. Do not add `applicable_standards` to the variant attribute map without a deliberate decision to do so.
+
+**`matching_status` claim reset:** If `_triggerMatching()` exits early (not enough completed extractions), it resets `matching_status` to NULL so a future worker run can retry. Consequence: do not interpret `matching_status=NULL` as "never ran" — it may mean "ran but could not proceed."
+
+**Test spec section:** `test_spec_section.html` in the repo root is an HTML file covering 5 products (1-pole 120V 15A / 2-pole 240V 20A / 2-pole 240V 40A @22kA / 3-pole 480V 1200A / 3-pole 480V 250A bus plug). Open in Chrome/Edge → Ctrl+P → Save as PDF to generate a test PDF for uploading to ScopeSync. The 40A @22kA product is the most useful case — it differentiates BL-series (10kA, FAIL) from BLH-series (22kA, PASS).
 
 ---
 
