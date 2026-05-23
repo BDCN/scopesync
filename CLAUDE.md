@@ -288,6 +288,11 @@ ScopeSync is a multi-tenant SaaS for construction submittal automation. The prod
 
 **`status = 'complete'` vs `status = 'delivered'`:** The schema ENUM includes both. `complete` = package PDF generated and available to download. `delivered` is reserved for a future step (e.g., email to GC/engineer). Don't advance to `delivered` automatically.
 
+### Phase 5 — post-deploy fixes (2026-05-23)
+
+- `migrations/0004_status_complete.sql` — adds `'complete'` to `submittal_jobs.status` ENUM. **Critical bug:** the original schema ENUM did not include `'complete'`. MySQL in non-strict mode silently stores an empty string for an invalid ENUM value, so `status='complete'` appeared to succeed (no PHP exception, no Apache error) but the column never updated. Symptom: PDF was generated and written to disk, `output_path` was saved, but status stayed `'assembling'` forever. Fix: always verify ENUM columns include all values before writing code that uses new ones.
+- `application/views/submittals/review.php` — filter strip (All / Pass / Partial / Fail / Unverifiable) above card list; client-side JS show/hide with no page reload; all four result types always shown regardless of count so users can filter to Pass and bulk-approve. Approve All button in header: approves all currently visible (filtered) cards sequentially via XHR, shows live progress counter (`Approving N/M…`), reloads when complete. Filter + Approve All compose: e.g. filter to "Pass" → Approve All → approves only pass results.
+
 ---
 
 ### Matching Engine — Known Gotchas
